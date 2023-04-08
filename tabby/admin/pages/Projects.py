@@ -19,13 +19,12 @@ projects = config.get("projects", {})
 
 def count_by_language(dataset):
     key = "language"
-    df = (
+    return (
         pd.DataFrame(dataset[key], columns=[key])
         .groupby([key])
         .size()
         .to_frame("# Files")
     )
-    return df
 
 
 def dataset_info():
@@ -55,7 +54,7 @@ def project_list():
 
         git_repository = Path(git_repositories_dir, k)
         if not git_repository.is_dir():
-            st.write(f"Status: *Before Initialization*")
+            st.write("Status: *Before Initialization*")
             continue
 
         repo = Repo(git_repository)

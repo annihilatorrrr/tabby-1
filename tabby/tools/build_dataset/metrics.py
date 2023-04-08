@@ -5,18 +5,12 @@ def max_line_length(content):
 def avg_line_length(content):
     lines = [len(x) for x in content.splitlines()]
     total = sum(lines)
-    if len(lines) != 0:
-        return total / len(lines)
-    else:
-        return 0
+    return total / len(lines) if lines else 0
 
 
 def alphanum_fraction(content):
     alphanum = [x for x in content if x.isalpha() or x.isnumeric()]
-    if len(content) != 0:
-        return len(alphanum) / len(content)
-    else:
-        return 0
+    return len(alphanum) / len(content) if len(content) != 0 else 0
 
 
 def compute(content):

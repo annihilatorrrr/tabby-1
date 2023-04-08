@@ -41,8 +41,7 @@ if not _RELEASE:
     import streamlit as st
 
     code = st.text_input("code")
-    set_code = st.button("Set code")
-    if set_code:
+    if set_code := st.button("Set code"):
         st_monaco(code=code, key="1")
     else:
         st_monaco(key="1")

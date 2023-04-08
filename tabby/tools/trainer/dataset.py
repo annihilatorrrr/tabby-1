@@ -35,8 +35,7 @@ class ConstantLengthDataset:
 
     def __call__(self):
         def gen():
-            for x in self:
-                yield x
+            yield from self
 
         return gen()
 
@@ -66,9 +65,7 @@ class ConstantLengthDataset:
         more_examples = True
         while more_examples:
             buffer, buffer_len = [], 0
-            while True:
-                if buffer_len >= self.max_buffer_size:
-                    break
+            while buffer_len < self.max_buffer_size:
                 try:
                     buffer.append(next(iterator)[self.content_field])
                     buffer_len += len(buffer[-1])

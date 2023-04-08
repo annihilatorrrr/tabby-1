@@ -31,7 +31,7 @@ def split_and_convert_process(saved_dir, factor, key, args, config, val):
         or key.find("final_layernorm.weight") != -1
         or key.find("final_layernorm.bias") != -1
     ):
-        saved_path = saved_dir + f"/model.{key}.bin"
+        saved_path = f"{saved_dir}/model.{key}.bin"
         val.tofile(saved_path)
 
     elif (
@@ -40,7 +40,7 @@ def split_and_convert_process(saved_dir, factor, key, args, config, val):
     ):
         split_vals = np.split(val, factor, axis=0)
         for j in range(factor):
-            saved_path = saved_dir + f"/model.{key}.{j}.bin"
+            saved_path = f"{saved_dir}/model.{key}.{j}.bin"
             split_vals[j].tofile(saved_path)
 
     elif (
@@ -50,7 +50,7 @@ def split_and_convert_process(saved_dir, factor, key, args, config, val):
 
         split_vals = np.split(val, factor, axis=-1)
         for j in range(factor):
-            saved_path = saved_dir + f"/model.{key}.{j}.bin"
+            saved_path = f"{saved_dir}/model.{key}.{j}.bin"
             split_vals[j].tofile(saved_path)
 
     elif key.find("attention.query_key_value.bias") != -1:
@@ -62,7 +62,7 @@ def split_and_convert_process(saved_dir, factor, key, args, config, val):
         split_vals = np.split(val, factor, axis=-1)
 
         for j in range(factor):
-            saved_path = saved_dir + f"/model.{key}.{j}.bin"
+            saved_path = f"{saved_dir}/model.{key}.{j}.bin"
             split_vals[j].tofile(saved_path)
 
     elif key.find("attention.query_key_value.weight") != -1:
@@ -78,11 +78,11 @@ def split_and_convert_process(saved_dir, factor, key, args, config, val):
         split_vals = np.split(val, factor, axis=-1)
 
         for j in range(factor):
-            saved_path = saved_dir + f"/model.{key}.{j}.bin"
+            saved_path = f"{saved_dir}/model.{key}.{j}.bin"
             split_vals[j].tofile(saved_path)
 
     else:
-        print("[ERROR] cannot find key '{}'".format(key))
+        print(f"[ERROR] cannot find key '{key}'")
 
 
 def split_and_convert(args):
@@ -112,10 +112,11 @@ def split_and_convert(args):
         use_gptj_residual = int(hf_config["use_parallel_residual"])
 
         config = configparser.ConfigParser()
-        config["gptneox"] = {}
-        config["gptneox"]["model_name"] = model_name
-        config["gptneox"]["head_num"] = str(n_heads)
-        config["gptneox"]["size_per_head"] = str(head_size)
+        config["gptneox"] = {
+            "model_name": model_name,
+            "head_num": str(n_heads),
+            "size_per_head": str(head_size),
+        }
         config["gptneox"]["inter_size"] = str(hf_config["intermediate_size"])
         config["gptneox"]["num_layer"] = str(hf_config["num_hidden_layers"])
         config["gptneox"]["rotary_embedding"] = str(rotary_dim)
@@ -125,10 +126,10 @@ def split_and_convert(args):
         config["gptneox"]["use_gptj_residual"] = str(use_gptj_residual)
         config["gptneox"]["weight_data_type"] = args.weight_data_type
 
-        with open((Path(saved_dir) / f"config.ini").as_posix(), "w") as configfile:
+        with open((Path(saved_dir) / "config.ini").as_posix(), "w") as configfile:
             config.write(configfile)
     except Exception as e:
-        print(f"Fail to save the config in config.ini.", e)
+        print("Fail to save the config in config.ini.", e)
 
     ft_model_name_pattern = [
         "input_layernorm.bias",
@@ -154,17 +155,17 @@ def split_and_convert(args):
             print("skipped", name)
             continue
         elif name == "gpt_neox.embed_in.weight":
-            array.tofile(saved_dir + "model.wte.bin")
+            array.tofile(f"{saved_dir}model.wte.bin")
         elif name == "gpt_neox.final_layer_norm.bias":
-            array.tofile(saved_dir + "model.final_layernorm.bias.bin")
+            array.tofile(f"{saved_dir}model.final_layernorm.bias.bin")
         elif name == "gpt_neox.final_layer_norm.weight":
-            array.tofile(saved_dir + "model.final_layernorm.weight.bin")
+            array.tofile(f"{saved_dir}model.final_layernorm.weight.bin")
         elif name == "embed_out.weight":
-            array.tofile(saved_dir + "model.lm_head.weight.bin")
+            array.tofile(f"{saved_dir}model.lm_head.weight.bin")
         else:
             processed = False
-            for i in range(len(ft_model_name_pattern)):
-                if name.find(ft_model_name_pattern[i]) != -1:
+            for item in ft_model_name_pattern:
+                if name.find(item) != -1:
                     new_name = name.replace("gpt_neox.", "")
                     pool.starmap(
                         split_and_convert_process,
@@ -192,16 +193,16 @@ def split_and_convert(args):
     if use_gptj_residual:
         for layer_idx in range(hf_config["num_hidden_layers"]):
             attn_bias = np.fromfile(
-                saved_dir + f"/model.layers.{layer_idx}.attention.dense.bias.bin",
+                f"{saved_dir}/model.layers.{layer_idx}.attention.dense.bias.bin",
                 dtype=np_weight_data_type,
             )
             mlp_bias = np.fromfile(
-                saved_dir + f"/model.layers.{layer_idx}.mlp.dense_4h_to_h.bias.bin",
+                f"{saved_dir}/model.layers.{layer_idx}.mlp.dense_4h_to_h.bias.bin",
                 dtype=np_weight_data_type,
             )
 
             (attn_bias + mlp_bias).astype(np_weight_data_type).tofile(
-                saved_dir + f"/model.layers.{layer_idx}.mlp.attention.bias.sum.bin"
+                f"{saved_dir}/model.layers.{layer_idx}.mlp.attention.bias.sum.bin"
             )
 
 
@@ -248,7 +249,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     print("\n=============== Argument ===============")
     for key in vars(args):
-        print("{}: {}".format(key, vars(args)[key]))
+        print(f"{key}: {vars(args)[key]}")
     print("========================================")
 
     shutil.rmtree(args.saved_dir, ignore_errors=True)

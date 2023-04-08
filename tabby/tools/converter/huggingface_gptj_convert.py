@@ -17,11 +17,11 @@ np.set_printoptions(linewidth=130, suppress=True)
 def savebin(param, save_path):
     if isinstance(param, torch.Tensor):
         param = param.cpu().float().numpy()
-    np.squeeze(param).astype(np.float16).tofile(save_path + ".bin")
+    np.squeeze(param).astype(np.float16).tofile(f"{save_path}.bin")
 
 
 def param2file(pt_param, layer_id, save_dir, dest_key):
-    base_n = save_dir + "/model.layers." + str(layer_id) + "."
+    base_n = f"{save_dir}/model.layers.{str(layer_id)}."
     save_path = base_n + dest_key
     savebin(pt_param, save_path)
 
@@ -35,63 +35,65 @@ def param2distributed(
     split_axis,
 ):
     np_param = pt_param.cpu().float().numpy()
-    base_n = save_dir + "/model.layers." + str(layer_id) + "."
+    base_n = f"{save_dir}/model.layers.{str(layer_id)}."
     save_path = base_n + dest_key
     split_param = np.split(np_param, n_inference_gpus, axis=split_axis)
     for i, p in enumerate(split_param):
-        savebin(p, save_path + f".{i}")
+        savebin(p, f"{save_path}.{i}")
 
 
 def save(w, save_dir, n_inference_gpus, n_layers, layer_id):
     makedirs(save_dir, exist_ok=True)
 
-    savebin(w["transformer.wte.weight"], save_dir + "/model.wte")
+    savebin(w["transformer.wte.weight"], f"{save_dir}/model.wte")
     l = layer_id
     print(f"Saving layer {l + 1} / {n_layers}")
-    base_k = "transformer.h." + str(l) + "."
-    param2file(w[base_k + "ln_1.bias"], l, save_dir, "input_layernorm.bias")
-    param2file(w[base_k + "ln_1.weight"], l, save_dir, "input_layernorm.weight")
+    base_k = f"transformer.h.{str(l)}."
+    param2file(w[f"{base_k}ln_1.bias"], l, save_dir, "input_layernorm.bias")
+    param2file(w[f"{base_k}ln_1.weight"], l, save_dir, "input_layernorm.weight")
     param2distributed(
-        w[base_k + "mlp.fc_in.weight"].T,
+        w[f"{base_k}mlp.fc_in.weight"].T,
         l,
         save_dir,
         "mlp.dense_h_to_4h.weight",
         n_inference_gpus,
-        split_axis=-1,  # split fast indx
+        split_axis=-1,
     )
     param2distributed(
-        w[base_k + "mlp.fc_in.bias"],
+        w[f"{base_k}mlp.fc_in.bias"],
         l,
         save_dir,
         "mlp.dense_h_to_4h.bias",
         n_inference_gpus,
-        split_axis=-1,  # split fast indx
+        split_axis=-1,
     )
 
     param2distributed(
-        w[base_k + "mlp.fc_out.weight"].T,
+        w[f"{base_k}mlp.fc_out.weight"].T,
         l,
         save_dir,
         "mlp.dense_4h_to_h.weight",
         n_inference_gpus,
-        split_axis=0,  # split slow indx
+        split_axis=0,
     )
-    param2file(w[base_k + "mlp.fc_out.bias"], l, save_dir, "mlp.dense_4h_to_h.bias")
+    param2file(
+        w[f"{base_k}mlp.fc_out.bias"], l, save_dir, "mlp.dense_4h_to_h.bias"
+    )
     param2distributed(
-        w[base_k + "attn.out_proj.weight"].T,
+        w[f"{base_k}attn.out_proj.weight"].T,
         l,
         save_dir,
         "attention.dense.weight",
         n_inference_gpus,
-        split_axis=0,  # split slow indx
+        split_axis=0,
     )
     QKV_w = torch.stack(
         [
-            w[base_k + "attn.q_proj.weight"],
-            w[base_k + "attn.k_proj.weight"],
-            w[base_k + "attn.v_proj.weight"],
+            w[f"{base_k}attn.q_proj.weight"],
+            w[f"{base_k}attn.k_proj.weight"],
+            w[f"{base_k}attn.v_proj.weight"],
         ]
-    )  # [qkv, n_heads * dim_head, latent_space]
+    )
     QKV_w = QKV_w.permute(2, 0, 1)
     param2distributed(
         QKV_w,
@@ -126,15 +128,15 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    ckpt_file = args.ckpt_dir + "/pytorch_model.bin"
+    ckpt_file = f"{args.ckpt_dir}/pytorch_model.bin"
     checkpoint = torch.load(ckpt_file)
     print(f"loading from {ckpt_file}")
 
     out_path = args.output_dir
-    output_dir = out_path + f"/{args.n_inference_gpus}-gpu/"
+    output_dir = f"{out_path}/{args.n_inference_gpus}-gpu/"
     print(f"saving to {output_dir}")
 
-    config_file = args.ckpt_dir + "/config.json"
+    config_file = f"{args.ckpt_dir}/config.json"
     hf_config = PretrainedConfig.from_json_file(config_file).to_dict()
 
     # NOTE: save parameters to config files (loaded by triton backends)
@@ -160,22 +162,23 @@ if __name__ == "__main__":
         config["gptj"]["end_id"] = str(hf_config["eos_token_id"])
         config["gptj"]["weight_data_type"] = "fp16"
         Path(output_dir).mkdir(exist_ok=True, parents=True)
-        with open(output_dir + "/config.ini", "w") as configfile:
+        with open(f"{output_dir}/config.ini", "w") as configfile:
             config.write(configfile)
     except:
-        print(f"Fail to save the config in config.ini.")
+        print("Fail to save the config in config.ini.")
 
     n_layers = hf_config["n_layer"]
     for i in range(n_layers):
         save(checkpoint, output_dir, args.n_inference_gpus, n_layers, i)
     savebin(
         checkpoint["transformer.ln_f.weight"],
-        output_dir + "/model.final_layernorm.weight",
+        f"{output_dir}/model.final_layernorm.weight",
     )
     savebin(
-        checkpoint["transformer.ln_f.bias"], output_dir + "/model.final_layernorm.bias"
+        checkpoint["transformer.ln_f.bias"],
+        f"{output_dir}/model.final_layernorm.bias",
     )
-    savebin(checkpoint["lm_head.weight"], output_dir + "/model.lm_head.weight")
-    savebin(checkpoint["lm_head.bias"], output_dir + "/model.lm_head.bias")
+    savebin(checkpoint["lm_head.weight"], f"{output_dir}/model.lm_head.weight")
+    savebin(checkpoint["lm_head.bias"], f"{output_dir}/model.lm_head.bias")
 
     print("done")
