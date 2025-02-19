@@ -1,25 +1,84 @@
-// The module 'vscode' contains the VS Code extensibility API
-// Import the module and reference it with the alias vscode in your code below
-import { ExtensionContext, languages } from "vscode";
-import { tabbyCommands } from "./Commands";
-import { TabbyCompletionProvider } from "./TabbyCompletionProvider";
-import { tabbyStatusBarItem } from "./TabbyStatusBarItem";
+import { window, ExtensionContext } from "vscode";
+import { getLogger } from "./logger";
+import { Client, createClient } from "./lsp/client";
+import { InlineCompletionProvider } from "./InlineCompletionProvider";
+import { Config } from "./Config";
+import { GitProvider } from "./git/GitProvider";
+import { ContextVariables } from "./ContextVariables";
+import { StatusBarItem } from "./StatusBarItem";
+import { ChatSidePanelProvider } from "./chat/sidePanel";
+import { Commands } from "./commands";
+import { init as initFindFiles } from "./findFiles";
+import { CodeActions } from "./CodeActions";
 
-// this method is called when your extension is activated
-// your extension is activated the very first time the command is executed
-export function activate(context: ExtensionContext) {
-  console.debug("Activating Tabby extension", new Date());
+const logger = getLogger();
+let clientRef: Client | undefined = undefined;
+
+export async function activate(context: ExtensionContext) {
+  logger.info("Activating Tabby extension...");
+
+  const client = createClient(context, logger);
+  const config = new Config(context);
+  const contextVariables = new ContextVariables(client, config);
+  const inlineCompletionProvider = new InlineCompletionProvider(client, config);
+  const gitProvider = new GitProvider();
+
+  client.registerConfigManager(config);
+  client.registerInlineCompletionProvider(inlineCompletionProvider);
+  client.registerGitProvider(gitProvider);
+  clientRef = client;
+
+  // Register chat panel
+  const chatViewProvider = new ChatSidePanelProvider(context, client, contextVariables, gitProvider);
   context.subscriptions.push(
-    languages.registerInlineCompletionItemProvider(
-      { pattern: "**" },
-      new TabbyCompletionProvider()
-    ),
-    tabbyStatusBarItem,
-    ...tabbyCommands
+    window.registerWebviewViewProvider("tabby.chatView", chatViewProvider, {
+      webviewOptions: { retainContextWhenHidden: true },
+    }),
   );
+
+  // Register status bar item
+  const statusBarItem = new StatusBarItem(client, config);
+  statusBarItem.registerInContext(context);
+
+  // Register command
+  const commands = new Commands(
+    context,
+    client,
+    config,
+    contextVariables,
+    inlineCompletionProvider,
+    chatViewProvider,
+    gitProvider,
+  );
+  commands.register();
+
+  // Register code actions
+  /* eslint-disable-next-line @typescript-eslint/ban-ts-comment */ /* eslint-disable-next-line @typescript-eslint/prefer-ts-expect-error */
+  /* eslint-disable-next-line @typescript-eslint/no-unused-vars */ // @ts-ignore noUnusedLocals
+  const codeActions = new CodeActions(client, contextVariables);
+
+  logger.info("Tabby extension activated.");
+
+  // Start async initialization
+  const startClient = async () => {
+    await gitProvider.init();
+
+    logger.info("Launching language server tabby-agent...");
+    await client.start();
+    logger.info("Language server tabby-agent launched.");
+  };
+
+  await Promise.all([
+    // start LSP client
+    startClient(),
+
+    // findFiles preheat
+    initFindFiles(context),
+  ]);
 }
 
-// this method is called when your extension is deactivated
-export function deactivate() {
-  console.debug("Deactivating Tabby extension", new Date());
+export async function deactivate() {
+  logger.info("Deactivating Tabby extension...");
+  await clientRef?.stop();
+  logger.info("Tabby extension deactivated.");
 }

@@ -1,3 +1,8 @@
-**/.git
+.idea
+ci
+clients
+.github
+python
+**/target
 **/node_modules
-**/__pycache__
+website

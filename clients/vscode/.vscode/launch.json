@@ -6,44 +6,39 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Run Extension without Local Extensions",
+      "name": "Run Extension",
       "type": "extensionHost",
       "request": "launch",
       "args": ["--extensionDevelopmentPath=${workspaceFolder}", "--disable-extensions"],
       "outFiles": ["${workspaceFolder}/dist/**/*.js"],
-      "preLaunchTask": "${defaultBuildTask}"
+      "preLaunchTask": "watch"
     },
     {
-      "name": "Run Extension",
+      "name": "Run Web Extension",
       "type": "extensionHost",
-      "request": "launch",
-      "args": ["--extensionDevelopmentPath=${workspaceFolder}"],
-      "outFiles": ["${workspaceFolder}/dist/**/*.js"],
-      "preLaunchTask": "${defaultBuildTask}"
-    },
-    {
-      "name": "Run Web Extension in VS Code",
-      "type": "pwa-extensionHost",
       "debugWebWorkerHost": true,
       "request": "launch",
       "args": [
         "--extensionDevelopmentPath=${workspaceFolder}",
-        "--extensionDevelopmentKind=web",
-        "--disable-extensions"
+        "--disable-extensions",
+        "--extensionDevelopmentKind=web"
       ],
       "outFiles": ["${workspaceFolder}/dist/**/*.js"],
-      "preLaunchTask": "${defaultBuildTask}"
+      "preLaunchTask": "watch"
     },
     {
-      "name": "Extension Tests",
-      "type": "extensionHost",
+      "name": "Run Web Extension in Browser",
+      "type": "node",
       "request": "launch",
-      "args": [
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": [
+        "vscode-test-web",
         "--extensionDevelopmentPath=${workspaceFolder}",
-        "--extensionTestsPath=${workspaceFolder}/out/test/suite/index"
+        "--browserType=chromium",
+        "--port=3000"
       ],
-      "outFiles": ["${workspaceFolder}/out/**/*.js", "${workspaceFolder}/dist/**/*.js"],
-      "preLaunchTask": "tasks: watch-tests"
+      "outFiles": ["${workspaceFolder}/dist/**/*.js"],
+      "preLaunchTask": "watch"
     }
   ]
 }
